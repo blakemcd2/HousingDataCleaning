@@ -1,0 +1,141 @@
+/* 
+Cleaning Data in SQL Queries
+*/
+
+SELECT *
+FROM HOUSING..Nashville
+
+-- Create a standardized date format (SaleDateConverted), and remove old date column
+
+ALTER TABLE Housing..Nashville
+ADD SaleDateConverted date;
+
+UPDATE Housing..Nashville
+SET SaleDateConverted = CONVERT(date, SaleDate)
+
+ALTER TABLE Housing..Nashville
+DROP COLUMN SaleDate
+
+-- Populate PropertyAddress data
+
+SELECT *
+FROM Housing..Nashville
+WHERE PropertyAddress is NULL
+
+SELECT a.ParcelID, 
+       a.PropertyAddress, 
+       b.ParcelID, 
+       b.PropertyAddress,
+       ISNULL(a.PropertyAddress, b.PropertyAddress)
+FROM Housing..Nashville AS a
+JOIN Housing..Nashville AS b
+ON a.ParcelID = b.ParcelID
+AND a.[UniqueID] <> b.[UniqueID]
+WHERE a.PropertyAddress IS NULL
+
+UPDATE a
+SET PropertyAddress = ISNULL(a.PropertyAddress, b.PropertyAddress)
+FROM Housing..Nashville AS a
+JOIN Housing..Nashville AS b
+ON a.ParcelID = b.ParcelID
+AND a.[UniqueID] <> b.[UniqueID]
+WHERE a.PropertyAddress IS NULL
+
+-- Breaking out Property_Address into individual columns (Adress, City) using substring queries
+
+SELECT PropertyAddress
+FROM Housing..Nashville
+
+SELECT SUBSTRING(PropertyAddress, 1, CHARINDEX(',', PropertyAddress) -1) AS Address,
+       SUBSTRING(PropertyAddress, CHARINDEX(',', PropertyAddress) +1, LEN(PropertyAddress)) AS Suburb
+FROM Housing..Nashville
+
+ALTER TABLE Housing..Nashville
+ADD UpdatedPropertyAddress NVARCHAR(255);
+
+UPDATE Housing..Nashville
+SET UpdatedPropertyAddress = SUBSTRING(PropertyAddress, 1, CHARINDEX(',', PropertyAddress) -1)
+
+ALTER TABLE Housing..Nashville
+ADD City NVARCHAR(255);
+
+UPDATE Housing..Nashville
+SET City = SUBSTRING(PropertyAddress, CHARINDEX(',', PropertyAddress) +1, LEN(PropertyAddress))
+
+ALTER TABLE Housing..Nashville
+DROP COLUMN PropertyAddress
+
+-- Breaking OwnerAddress into Address, City, State
+
+SELECT OwnerAddress
+FROM Housing..Nashville
+
+SELECT PARSENAME(REPLACE(OwnerAddress, ',','.'), 3) AS OwnerAddress,
+       PARSENAME(REPLACE(OwnerAddress, ',','.'), 2) AS OwnerCity,
+       PARSENAME(REPLACE(OwnerAddress, ',','.'), 1) AS OwnerState
+FROM Housing..Nashville
+
+ALTER TABLE Housing..Nashville
+ADD UpdatedOwnerAddress NVARCHAR(255);
+ALTER TABLE Housing..Nashville
+ADD OwnerCity NVARCHAR(255);
+ALTER TABLE Housing..Nashville
+ADD OwnerState NVARCHAR(255);
+
+UPDATE Housing..Nashville
+SET UpdatedOwnerAddress = PARSENAME(REPLACE(OwnerAddress, ',','.'), 3)
+UPDATE Housing..Nashville
+SET OwnerCity = PARSENAME(REPLACE(OwnerAddress, ',','.'), 2)
+UPDATE Housing..Nashville
+SET OwnerState = PARSENAME(REPLACE(OwnerAddress, ',','.'), 1)
+
+ALTER TABLE Housing..Nashville
+DROP COLUMN OwnerAddress
+
+-- Change Y and N to Yes and No in SoldAsVacant
+
+SELECT SoldAsVacant,
+       CASE WHEN SoldAsVacant = 'N' THEN 'No'
+            WHEN SoldAsVacant = 'Y' THEN 'Yes'
+       ELSE SoldAsVacant
+       END
+FROM Housing..Nashville
+
+UPDATE Housing..Nashville
+SET SoldAsVacant = CASE WHEN SoldAsVacant = 'N' THEN 'No'
+                        WHEN SoldAsVacant = 'Y' THEN 'Yes'
+                        ELSE SoldAsVacant
+                        END
+
+
+-- Remove Duplicates using Rank, DenseRank or Row Number
+
+WITH RowNumCTE AS(
+       SELECT *,
+              ROW_NUMBER() OVER(
+              PARTITION BY ParcelID, 
+                           UpdatedPropertyAddress,
+                           SalePrice,
+                           SaleDateConverted,
+                           LegalReference
+              ORDER BY UniqueID
+       ) RowNum
+       FROM Housing..Nashville
+)
+
+-- Deletes everything that is a duplicate
+
+DELETE
+FROM RowNumCTE
+WHERE RowNum > 1
+ 
+
+
+-- Remove unused columns (Refer to Drop Column Querys above also)
+
+SELECT *
+FROM Housing..Nashville
+
+
+ALTER TABLE Housing..Nashville
+DROP COLUMN TaxDistrict
